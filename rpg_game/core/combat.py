@@ -286,4 +286,3 @@ if __name__ == '__main__':
 
     # Test player viewing inventory after combat
     test_player.view_inventory()
-```
