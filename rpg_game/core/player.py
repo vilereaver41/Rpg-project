@@ -355,5 +355,3 @@ if __name__ == '__main__':
     print(f"Updated Max HP: {player.max_hp}") 
     print(f"HP after constitution decrease: {player.hp}/{player.max_hp}") 
     print("-" * 20)
-
-```
