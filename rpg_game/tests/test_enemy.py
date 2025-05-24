@@ -98,6 +98,7 @@ class TestEnemyLoader(unittest.TestCase):
         self.assertEqual(squirrelkin.loot[0].name, "Squirrelkin Pelt")
         self.assertIsInstance(squirrelkin.loot[1], Item)
         self.assertEqual(squirrelkin.loot[1].name, "Rusty Knife")
+        self.assertIsNone(squirrelkin.zone_name, "Squirrelkin's zone_name should be None as test CSV has no zone markers.")
 
 
         # --- Goblin Crook Verification ---
@@ -122,6 +123,7 @@ class TestEnemyLoader(unittest.TestCase):
         for item_name in expected_goblin_loot:
             self.assertIn(item_name, loaded_goblin_loot_names)
             self.assertTrue(any(isinstance(i, Item) for i in goblin_crook.loot if i.name == item_name))
+        self.assertIsNone(goblin_crook.zone_name, "Goblin Crook's zone_name should be None as test CSV has no zone markers.")
 
 
         # --- River Sprite Verification ---
@@ -142,6 +144,7 @@ class TestEnemyLoader(unittest.TestCase):
         loaded_rs_loot_names = [item.name for item in river_sprite.loot]
         for item_name in expected_rs_loot:
             self.assertIn(item_name, loaded_rs_loot_names)
+        self.assertIsNone(river_sprite.zone_name, "River Sprite's zone_name should be None as test CSV has no zone markers.")
 
 
     def test_file_not_found(self):

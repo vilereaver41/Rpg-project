@@ -24,11 +24,13 @@ try:
     from rpg_game.core.weapon import Weapon
     from rpg_game.core.skill import Skill, Ability, PassiveSkill, Spell
     from rpg_game.core.status_effect import StatusEffect
+    from rpg_game.world.zone import Zone # Import Zone
 except ImportError: # Fallback
     # This assumes the script might be run from 'rpg_game/data' or 'rpg_game' is in path
     # Adjusting path to find 'core' if running from 'data'
     import sys
     sys.path.append(os.path.join(os.path.dirname(__file__), '..')) # Go up to rpg_game directory
+    sys.path.append(os.path.join(os.path.dirname(__file__), '..', 'world')) # For Zone
     from core.enemy import Enemy
     from core.item import Item
     from core.equipment import Equipment
@@ -37,6 +39,7 @@ except ImportError: # Fallback
     from core.weapon import Weapon
     from core.skill import Skill, Ability, PassiveSkill, Spell
     from core.status_effect import StatusEffect
+    from world.zone import Zone
 
 
 class GameDataManager:
@@ -51,6 +54,7 @@ class GameDataManager:
         self.weapons: Dict[str, Weapon] = {}
         self.skills: Dict[str, Skill] = {} # Holds Abilities, Spells, PassiveSkills
         self.status_effects: Dict[str, StatusEffect] = {}
+        self.zones: Dict[str, Zone] = {} # Added zones attribute
         
         self.all_items: Dict[str, Item] = {} # Combined for convenience
 
@@ -137,15 +141,18 @@ class GameDataManager:
         # Note: Enemy linking logic will be added in a subsequent step.
         # For now, it loads enemies but doesn't link their skills/loot yet.
         enemies_path = os.path.join(base_csv_path, "Enemy's Sheet.csv")
-        print(f"\nLoading enemies from: {enemies_path}")
+        print(f"\nLoading enemies and zones from: {enemies_path}")
         try:
-            # Pass self.skills and self.all_items to the enemy loader
-            self.enemies = load_enemies_from_csv(enemies_path, self.skills, self.all_items)
+            # load_enemies_from_csv now returns (enemies, zones)
+            loaded_enemies, loaded_zones = load_enemies_from_csv(enemies_path, self.skills, self.all_items)
+            self.enemies = loaded_enemies
+            self.zones = loaded_zones
             print(f"  Loaded {len(self.enemies)} enemies.")
+            print(f"  Loaded {len(self.zones)} zones.")
         except FileNotFoundError:
-            print(f"  ERROR: Enemies file not found at {enemies_path}. Skipping.")
+            print(f"  ERROR: Enemies/Zones file not found at {enemies_path}. Skipping.")
         except Exception as e:
-            print(f"  ERROR: Failed to load enemies: {e}")
+            print(f"  ERROR: Failed to load enemies/zones: {e}")
             
         print("\nAll data loading attempted.")
 
@@ -162,6 +169,9 @@ class GameDataManager:
 
     def get_status_effect(self, name: str) -> Optional[StatusEffect]:
         return self.status_effects.get(name)
+
+    def get_zone(self, name: str) -> Optional[Zone]:
+        return self.zones.get(name)
 
 if __name__ == '__main__':
     # This block assumes that the script is run from the 'rpg_game/data' directory,
@@ -205,8 +215,16 @@ if __name__ == '__main__':
         "Armor, Accesories, Shields.csv": ["Armor\nName,,Tier,Recipe,Equip Type,Attack,Defense\nLeather Vest,,Common,,Armor,,5"],
         "Potions, Consumables, Materials.csv": ["Potions\nName,,Effect Notes\nMinor Health Potion,,Restores 10 HP\nRaw Ingriedient\nName,Rarity\nIron Ore,Common"],
         "Revised Weapon Sheet.csv": ["Swords Level 1-50\nName,Level Range,Source,Tier,Attack Type,Attack\nBasic Sword,1-5,Starter,Common,Physical,5"],
-        "Enemy's Sheet.csv": ["Name,Level Range,Spawn Chance,Type,Max Hp Lowest Level,Max Mp,Attack,Defense,M.Attack,M.Defense.,Agility,Luck,Has Sprite?,Abilitys & Spells,,Enemy Loot\nGoblin,1-3,Common,Goblinoid,30,0,5,2,0,0,3,1,Yes,Scratch,,Gold Coin"]
+        # Updated dummy Enemy's Sheet.csv to include a zone marker
+        "Enemy's Sheet.csv": [
+            "Name,Level Range,Spawn Chance,Type,Max Hp Lowest Level,Max Mp,Attack,Defense,M.Attack,M.Defense.,Agility,Luck,Has Sprite?,Abilitys & Spells,,Enemy Loot",
+            "Forest Test Zone,,,,,,,,,,,,,,,", # Zone marker
+            "Goblin,1-3,Common,Goblinoid,30,0,5,2,0,0,3,1,Yes,Slash,,Iron Ore"
+        ]
     }
+
+    # Import csv for dummy file creation here, as it's only used in __main__
+    import csv 
 
     if not os.path.exists(dummy_csv_base_path):
         os.makedirs(dummy_csv_base_path, exist_ok=True)
@@ -230,7 +248,9 @@ if __name__ == '__main__':
     sample_enemy_name = "Goblin" # From dummy CSV
     enemy = data_manager.get_enemy(sample_enemy_name)
     if enemy:
-        print(f"Found Enemy '{sample_enemy_name}': HP {enemy.max_hp}, Attack {enemy.attack_power}")
+        print(f"Found Enemy '{sample_enemy_name}': HP {enemy.max_hp}, Attack {enemy.attack_power}, Zone: {enemy.zone_name}")
+        if enemy.abilities_spells: print(f"  Abilities: {[s.name for s in enemy.abilities_spells]}")
+        if enemy.loot: print(f"  Loot: {[i.name for i in enemy.loot]}")
     else:
         print(f"Enemy '{sample_enemy_name}' not found.")
 
@@ -270,5 +290,16 @@ if __name__ == '__main__':
         print(f"Found Status Effect '{sample_status_effect_name}': Type {status_effect.effect_type}, Duration {status_effect.duration_str}")
     else:
         print(f"Status Effect '{sample_status_effect_name}' not found.")
+
+    # Try to get a zone
+    print(f"GDM: Zones loaded: {len(data_manager.zones)}")
+    sample_zone_name = "Forest Test Zone" # From dummy CSV
+    zone = data_manager.get_zone(sample_zone_name)
+    if zone:
+        print(f"Found Zone '{sample_zone_name}': Enemies {zone.enemy_names}")
+        if "Goblin" in zone.enemy_names:
+            print(f"  'Goblin' is correctly listed in '{sample_zone_name}'.")
+    else:
+        print(f"Zone '{sample_zone_name}' not found.")
 
     print("\n--- GameDataManager Test Finished ---")

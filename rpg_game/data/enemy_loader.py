@@ -1,5 +1,5 @@
 import csv
-from typing import Dict, List
+from typing import Dict, List, Tuple, Optional
 # Adjust the import path based on your project structure.
 try:
     from rpg_game.core.enemy import Enemy
@@ -7,17 +7,20 @@ try:
     from rpg_game.core.item import Item   # For type hinting and dummy data
     from rpg_game.core.consumable import Consumable # For dummy item data
     from rpg_game.core.material import Material # For dummy item data
+    from rpg_game.world.zone import Zone # Import Zone
 
 except ImportError:
     # Fallback for cases where the script might be run directly
     import sys
     import os
     sys.path.append(os.path.join(os.path.dirname(__file__), '..')) # To find 'core'
+    sys.path.append(os.path.join(os.path.dirname(__file__), '..', 'world')) # To find 'world'
     from core.enemy import Enemy
     from core.skill import Skill
     from core.item import Item
     from core.consumable import Consumable
     from core.material import Material
+    from world.zone import Zone
 
 
 def parse_list_from_string(s: str) -> List[str]:
@@ -28,12 +31,15 @@ def parse_list_from_string(s: str) -> List[str]:
 
 def load_enemies_from_csv(file_path: str, 
                           skills_data: Dict[str, Skill], 
-                          items_data: Dict[str, Item]) -> Dict[str, Enemy]:
+                          items_data: Dict[str, Item]) -> Tuple[Dict[str, Enemy], Dict[str, Zone]]:
     """
     Loads enemy data from a CSV file and returns a dictionary of Enemy objects,
     linking abilities/spells and loot to actual Skill and Item objects.
+    Also loads zone information from the same CSV.
     """
     enemies: Dict[str, Enemy] = {}
+    zones: Dict[str, Zone] = {}
+    current_zone: Optional[Zone] = None
     
     expected_headers = [
         "Name", "Level Range", "Spawn Chance", "Type", "Max Hp Lowest Level", 
@@ -52,24 +58,57 @@ def load_enemies_from_csv(file_path: str,
                 # You might want to raise an error or handle this more gracefully
 
             for row_number, row in enumerate(reader, start=2): # start=2 because 1 is header, 2 is first data row
-                if not any(row) or (row[0] and all(not c for c in row[1:])): # Skip empty rows or zone separators
-                    if row[0] and ("Zone" in row[0] or "Den" in row[0]): # Heuristic for zone separators
-                         print(f"Skipping zone separator or empty row: {row[0]}")
-                         continue
-                    elif not any(row): # Completely empty row
-                        print(f"Skipping empty row at line {row_number}")
-                        continue
+                if not any(row): # Skip completely empty rows
+                    print(f"Skipping empty row at line {row_number}")
+                    continue
+
+                name_cell = row[0].strip()
+
+                # Zone Marker Detection
+                # Heuristic: first cell contains "Zone", "Den", "Citadel" etc.
+                # AND other critical cells (like HP at index 4, Attack at index 6) are empty.
+                is_zone_marker = False
+                if name_cell:
+                    zone_keywords = ["zone", "den", "citadel", "lair", "sanctum", "ruins", "plains", "forest", "mountain", "cave", "swamp"]
+                    is_potential_zone = any(keyword in name_cell.lower() for keyword in zone_keywords)
+                    
+                    # Check if critical stat cells are empty (or non-numeric, though empty check is simpler here)
+                    # Assuming HP is row[4], Attack is row[6]
+                    if is_potential_zone and len(row) > 6 and \
+                       (not row[4].strip() and not row[6].strip()):
+                        is_zone_marker = True
+
+                if is_zone_marker:
+                    zone_name = name_cell
+                    current_zone = Zone(name=zone_name)
+                    zones[zone_name] = current_zone
+                    print(f"Detected Zone: {zone_name} at row {row_number}")
+                    continue # Skip to the next row
+
+                # Existing check for rows that look like separators but aren't formal zone markers
+                # e.g. "Goblinoid Lair,,,,,,,,,,,,,,," (if the above didn't catch it as a Zone)
+                if name_cell and all(not c.strip() for c in row[1:len(expected_headers)-1]): # Check if all other expected cells are empty
+                    # This might be a sub-header or separator not intended as a new Zone object.
+                    # If it was meant to be a Zone, it should have been caught by the more specific check above.
+                    # For now, we'll just skip these as they are not valid enemies.
+                    # If this row *should* define a zone, the heuristic above needs adjustment.
+                    print(f"Skipping potential sub-header or separator row: {name_cell} at line {row_number}")
+                    continue
 
 
                 if len(row) != len(expected_headers):
-                    print(f"Warning: Skipping row {row_number} due to incorrect number of columns. Expected {len(expected_headers)}, got {len(row)}. Data: {row}")
+                    print(f"Warning: Skipping row {row_number} due to incorrect number of columns. Expected {len(expected_headers)}, got {len(row)}. Row: '{','.join(row)}'")
                     continue
 
                 try:
-                    name = row[0].strip()
-                    if not name: # Skip if name is empty
+                    name = name_cell # Already stripped
+                    if not name: # Skip if name is empty (should be caught by `any(row)` or zone checks mostly)
                         print(f"Warning: Skipping row {row_number} due to empty enemy name.")
                         continue
+                    
+                    # If it's an enemy row, and a zone is active, add enemy to zone
+                    if current_zone:
+                        current_zone.add_enemy_name(name)
 
                     level_range = row[1].strip()
                     spawn_chance = row[2].strip()
@@ -125,153 +164,124 @@ def load_enemies_from_csv(file_path: str,
                         luck=luck,
                         has_sprite=has_sprite,
                         abilities_spells=resolved_abilities_spells,
-                        loot=resolved_loot_items
+                        loot=resolved_loot_items,
+                        zone_name=current_zone.name if current_zone else None
                     )
                     enemies[name] = enemy_obj
                 
                 except IndexError:
-                    print(f"Warning: Skipping row {row_number} due to missing columns. Data: {row}")
+                    print(f"Warning: Skipping row {row_number} due to missing columns for enemy '{name if 'name' in locals() else 'Unknown'}'. Row data: {row}")
                     continue
                 except Exception as e:
-                    print(f"Warning: An unexpected error occurred while processing row {row_number} for enemy '{row[0] if row else 'Unknown'}': {e}. Data: {row}")
+                    print(f"Warning: An unexpected error occurred while processing enemy row {row_number} for '{name if 'name' in locals() else 'Unknown'}': {e}. Row data: {row}")
                     continue
                     
     except FileNotFoundError:
+        # Let FileNotFoundError propagate as per previous discussions for loaders
         print(f"Error: The file '{file_path}' was not found.")
-        return {} # Return empty dict if file not found
+        raise # Re-raise the exception
     except Exception as e:
         print(f"An error occurred while opening or reading the file: {e}")
-        return {}
+        # For other critical errors during file processing, return empty dicts
+        return {}, {}
 
-    return enemies
+    return enemies, zones
 
 if __name__ == '__main__':
-    # Create a dummy CSV file for testing if it doesn't exist.
-    # The actual path "Game Csv Data/Enemy's Sheet.csv" suggests it's outside the repo
     # For standalone testing of this loader, create dummy skills and items data.
-    # In the actual game, GameDataManager would provide these.
-    
-    # Dummy Skill and Item classes for standalone testing if real ones are complex
-    class MockSkill(Skill): # Inherit from real Skill to satisfy type hints
+    class MockSkill(Skill): 
         def __init__(self, name, description="Mock Skill Desc", skill_rarity="Common", skill_type_csv="Active", category="Mock Category"):
             super().__init__(name, description, skill_rarity, skill_type_csv, category)
         def __repr__(self): return f"Skill(name='{self.name}')"
 
-    class MockItem(Item): # Inherit from real Item
+    class MockItem(Item):
         def __init__(self, name, description="Mock Item Desc"):
             super().__init__(name, description)
         def __repr__(self): return f"Item(name='{self.name}')"
 
     dummy_skills_data = {
-        "Acorn Toss": MockSkill(name="Acorn Toss"),
-        "Backhand": MockSkill(name="Backhand"),
-        "Crack Pot": MockSkill(name="Crack Pot"),
-        "Fade": MockSkill(name="Fade"),
-        "Spirit Bolt": MockSkill(name="Spirit Bolt")
+        "Acorn Toss": MockSkill(name="Acorn Toss"), "Backhand": MockSkill(name="Backhand"), 
+        "Crack Pot": MockSkill(name="Crack Pot"), "Fade": MockSkill(name="Fade"), 
+        "Spirit Bolt": MockSkill(name="Spirit Bolt"), "Sand Bite": MockSkill(name="Sand Bite")
     }
     dummy_items_data = {
-        "Nut": Material(name="Nut", description="A simple nut.", rarity="Common"),
+        "Nut": Material(name="Nut", description="A simple nut.", rarity="Common"), 
         "Twig": Material(name="Twig", description="A small twig.", rarity="Common"),
-        "Small Coin": Material(name="Small Coin", description="A bit of currency.", rarity="Common"),
-        "Rusty Shank": Item(name="Rusty Shank", description="A crude, rusty knife."), # Generic Item
-        "Ectoplasm": Material(name="Ectoplasm", description="Ghostly residue.", rarity="Uncommon"),
-        "Faint Glow": Material(name="Faint Glow", description="A faintly glowing wisp.", rarity="Common")
+        "Small Coin": Material(name="Small Coin", description="A bit of currency.", rarity="Common"), 
+        "Rusty Shank": Item(name="Rusty Shank", description="A crude, rusty knife."),
+        "Ectoplasm": Material(name="Ectoplasm", description="Ghostly residue.", rarity="Uncommon"), 
+        "Faint Glow": Material(name="Faint Glow", description="A faintly glowing wisp.", rarity="Common"),
+        "Snake Scale": Material(name="Snake Scale", description="A dry scale.", rarity="Common")
     }
     
-    # Determine base path for CSVs, assuming this script is in rpg_game/data
-    # and "Game Csv Data" is at the project root (e.g., /app/Game Csv Data)
-    # The path used here assumes running from within rpg_game/data
-    # For running from project root like '/app', it would be "Game Csv Data/Enemy's Sheet.csv"
-    
-    # Try to make the path more robust for common execution contexts
     script_dir = os.path.dirname(__file__)
-    project_root_candidate1 = os.path.abspath(os.path.join(script_dir, "..", "..")) # If script is in /app/rpg_game/data
-    project_root_candidate2 = os.path.abspath(os.path.join(script_dir, ".."))      # If script is in /app/data
-    
+    # Try to find project root assuming script is in rpg_game/data or similar
+    project_root_candidate = os.path.abspath(os.path.join(script_dir, "..", "..")) 
     test_csv_relative_path = "Game Csv Data/Enemy's Sheet.csv"
     
-    if os.path.exists(os.path.join(project_root_candidate1, test_csv_relative_path)):
-        base_path_for_csv = project_root_candidate1
-    elif os.path.exists(os.path.join(project_root_candidate2, test_csv_relative_path)):
-         base_path_for_csv = project_root_candidate2
-    elif os.path.exists(test_csv_relative_path): # Running from a dir that has "Game Csv Data" as subdir
-        base_path_for_csv = "."
-    else: # Fallback if structure is unexpected, try relative to script dir (might fail if not in place)
-        base_path_for_csv = os.path.join(script_dir, "..", "..") # Default assumption for typical sandbox
-        print(f"Warning: Could not auto-detect CSV path structure well. Falling back to: {base_path_for_csv}")
+    if os.path.exists(os.path.join(project_root_candidate, test_csv_relative_path)):
+        base_path_for_csv = project_root_candidate
+    else: # Fallback for running directly in a flat structure or if 'Game Csv Data' is sibling to script's dir
+        base_path_for_csv = "." 
+        if not os.path.exists(test_csv_relative_path): # If still not found, assume it's in a standard test location
+             base_path_for_csv = os.path.join(script_dir, "..", "..") # Typical sandbox root relative to this file
+             print(f"Warning: CSV path auto-detection is approximate. Using base: {base_path_for_csv}")
+
 
     test_csv_path = os.path.join(base_path_for_csv, test_csv_relative_path)
 
-    # Ensure dummy CSV directory and file exist if the actual one is not found
-    # This is primarily for making this __main__ block runnable in test environments.
     if not os.path.exists(test_csv_path):
         print(f"Actual enemy CSV not found at '{test_csv_path}'. Creating a dummy file for testing.")
-        # Ensure the directory for the dummy CSV exists
         dummy_csv_dir = os.path.dirname(test_csv_path)
         if dummy_csv_dir and not os.path.exists(dummy_csv_dir):
-            try:
-                os.makedirs(dummy_csv_dir)
-                print(f"Created directory: {dummy_csv_dir}")
-            except OSError as e:
-                print(f"Failed to create directory {dummy_csv_dir}: {e}")
+            os.makedirs(dummy_csv_dir, exist_ok=True)
         
-        # Create the dummy CSV file
-        if dummy_csv_dir : # Only proceed if directory creation was successful or dir exists
+        if dummy_csv_dir or os.path.exists(os.path.dirname(test_csv_path)): # Check dir exists or can be made
             with open(test_csv_path, 'w', newline='', encoding='utf-8') as f:
                 writer = csv.writer(f)
-                writer.writerow([
-                    "Name", "Level Range", "Spawn Chance", "Type", "Max Hp Lowest Level", 
-                    "Max Mp", "Attack", "Defense", "M.Attack", "M.Defense.", "Agility", 
-                    "Luck", "Has Sprite?", "Abilitys & Spells", "", "Enemy Loot"
-                ])
+                writer.writerow(["Name", "Level Range", "Spawn Chance", "Type", "Max Hp Lowest Level", "Max Mp", "Attack", "Defense", "M.Attack", "M.Defense.", "Agility", "Luck", "Has Sprite?", "Abilitys & Spells", "", "Enemy Loot"])
+                writer.writerow(["Forest Zone", "", "", "", "", "", "", "", "", "", "", "", "", "", "", ""])
                 writer.writerow(["Squirrelkin", "1-2", "Common", "Beast", "30", "5", "5", "2", "0", "1", "8", "3", "Yes", "Acorn Toss", "", "Nut, Twig"])
                 writer.writerow(["Goblin Crook", "2-4", "Common", "Goblinoid", "45", "10", "8", "4", "2", "2", "6", "2", "Yes", "Backhand, Crack Pot", "", "Small Coin, Rusty Shank"])
-                writer.writerow(["Night Wisp", "3-5", "Uncommon", "Spirit", "25", "30", "2", "5", "10", "8", "10", "5", "No", "Fade, Spirit Bolt", "", "Ectoplasm, Faint Glow"])
+                writer.writerow(["Desert Zone", "", "", "", "", "", "", "", "", "", "", "", "", "", "", ""])
+                writer.writerow(["Sand Snake", "3-4", "Common", "Beast", "40", "0", "7", "3", "0", "0", "5", "2", "Yes", "Sand Bite", "", "Snake Scale"])
         else:
-            print(f"Skipping dummy CSV creation as directory '{dummy_csv_dir}' could not be confirmed/created.")
+            print(f"Skipping dummy CSV creation as directory for '{test_csv_path}' is problematic.")
 
-
-    print(f"Attempting to load enemies from: {os.path.abspath(test_csv_path)}")
-    # Only proceed if test_csv_path exists (either originally or created as dummy)
+    print(f"Attempting to load enemies and zones from: {os.path.abspath(test_csv_path)}")
     if os.path.exists(test_csv_path):
-        loaded_enemies = load_enemies_from_csv(test_csv_path, dummy_skills_data, dummy_items_data)
-        print(f"\nTotal enemies loaded: {len(loaded_enemies)}")
+        try:
+            loaded_enemies, loaded_zones = load_enemies_from_csv(test_csv_path, dummy_skills_data, dummy_items_data)
+            print(f"\nTotal enemies loaded: {len(loaded_enemies)}")
+            print(f"Total zones loaded: {len(loaded_zones)}")
 
-        if "Squirrelkin" in loaded_enemies:
-            sq = loaded_enemies["Squirrelkin"]
-            print(f"\nDetails for Squirrelkin:")
-            print(f"  Name: {sq.name}, HP: {sq.max_hp}, Attack: {sq.attack_power}")
-            # Display names of resolved skill and item objects
-            sq_skill_names = [s.name for s in sq.abilities_spells]
-            sq_loot_names = [l.name for l in sq.loot]
-            print(f"  Abilities: {sq_skill_names}")
-            print(f"  Loot: {sq_loot_names}")
-            if sq.abilities_spells and isinstance(sq.abilities_spells[0], Skill):
-                 print("  Squirrelkin abilities are Skill objects.")
-            if sq.loot and isinstance(sq.loot[0], Item):
-                 print("  Squirrelkin loot are Item objects.")
+            for enemy_name in ["Squirrelkin", "Goblin Crook", "Sand Snake"]:
+                if enemy_name in loaded_enemies:
+                    enemy = loaded_enemies[enemy_name]
+                    print(f"\nDetails for {enemy.name}: HP {enemy.max_hp}, ATK {enemy.attack_power}, Zone: {enemy.zone_name}")
+                    skill_names = [s.name for s in enemy.abilities_spells]
+                    loot_names = [l.name for l in enemy.loot]
+                    print(f"  Abilities: {skill_names}, Loot: {loot_names}")
+
+            if "Forest Zone" in loaded_zones:
+                fz = loaded_zones["Forest Zone"]
+                print(f"\nDetails for Forest Zone: Name '{fz.name}'")
+                print(f"  Enemies in Forest Zone: {fz.enemy_names}")
+            
+            if "Desert Zone" in loaded_zones:
+                dz = loaded_zones["Desert Zone"]
+                print(f"\nDetails for Desert Zone: Name '{dz.name}'")
+                print(f"  Enemies in Desert Zone: {dz.enemy_names}")
+                if "Sand Snake" in dz.enemy_names and "Sand Snake" in loaded_enemies:
+                    print("  Sand Snake correctly listed in Desert Zone and loaded.")
 
 
-        if "Goblin Crook" in loaded_enemies:
-            gc = loaded_enemies["Goblin Crook"]
-            print(f"\nDetails for Goblin Crook:")
-            gc_skill_names = [s.name for s in gc.abilities_spells]
-            gc_loot_names = [l.name for l in gc.loot]
-            print(f"  Abilities: {gc_skill_names}") # Should be list of Skill objects
-            print(f"  Loot: {gc_loot_names}")         # Should be list of Item objects
+        except FileNotFoundError:
+            print(f"  Error: File not found during __main__ execution: {test_csv_path}")
+        except Exception as e:
+            print(f"  An unexpected error occurred in __main__: {e}")
+
     else:
-        print(f"Enemy CSV file '{test_csv_path}' not found and dummy creation failed. Skipping enemy loading for __main__ test.")
+        print(f"Enemy CSV file '{test_csv_path}' not found and dummy creation possibly failed. Skipping enemy/zone loading test in __main__.")
 
-
-    # Test with a non-existent file (should now raise FileNotFoundError from open())
-    print("\nTesting with a non-existent file (expect FileNotFoundError):")
-    try:
-        non_existent_enemies = load_enemies_from_csv("non_existent_enemy_sheet.csv", dummy_skills_data, dummy_items_data)
-        print(f"Total enemies loaded from non-existent file: {len(non_existent_enemies)}")
-    except FileNotFoundError as e:
-        print(f"  Successfully caught FileNotFoundError: {e}")
-    except Exception as e:
-        print(f"  Unexpected error for non-existent file: {e}")
-
-
-    print("\nEnemy loading test finished.")
+    print("\nEnemy loader __main__ test finished.")
