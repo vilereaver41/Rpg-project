@@ -238,6 +238,97 @@ class TestPlayerDerivedStats(unittest.TestCase):
         self.assertEqual(self.player.max_mp, 30) # 6 * 5
         self.assertEqual(self.player.mp, 30)
 
+# Import Item and Skill classes for new tests
+from core.item import Item
+from core.skill import Skill, Ability, Spell
+# Note: The Player class itself should already handle its own relative imports for these if needed internally.
+# Here, we need them for instantiation in the tests.
+
+class TestPlayerInventoryAndSkills(unittest.TestCase):
+    def setUp(self):
+        self.player = Player("TestHeroInventorySkills")
+
+    def test_add_item_to_inventory(self):
+        item1 = Item(name="Test Potion", description="A test potion")
+        self.player.add_item_to_inventory(item1)
+        self.assertIn(item1, self.player.inventory)
+        self.assertEqual(len(self.player.inventory), 1)
+
+        item2 = Item(name="Test Sword", description="A test sword")
+        self.player.add_item_to_inventory(item2)
+        self.assertIn(item2, self.player.inventory)
+        self.assertEqual(len(self.player.inventory), 2)
+
+    def test_learn_skill(self):
+        # Ability requires: name, description, skill_rarity, skill_type_csv, category, and other optionals
+        ability1 = Ability(name="Test Strike", description="A test strike ability.", 
+                           skill_rarity="Common", skill_type_csv="Active", category="Combat",
+                           cost="5 TP", formula="ATK*1.2")
+        
+        # Spell requires: name, description, skill_rarity, skill_type_csv, category, and other optionals
+        spell1 = Spell(name="Test Heal", description="A test healing spell.", 
+                       skill_rarity="Common", skill_type_csv="Active", category="Magic",
+                       cost="10 MP", element="Light", formula="MATK*1.5")
+        
+        generic_skill = Skill(name="Generic Skill", description="A generic skill.", 
+                              skill_rarity="Common", skill_type_csv="Passive", category="General")
+
+        self.player.learn_skill(ability1)
+        self.assertIn(ability1, self.player.known_abilities)
+        self.assertEqual(len(self.player.known_abilities), 1)
+        self.assertNotIn(ability1, self.player.known_spells)
+
+        self.player.learn_skill(spell1)
+        self.assertIn(spell1, self.player.known_spells)
+        self.assertEqual(len(self.player.known_spells), 1)
+        self.assertNotIn(spell1, self.player.known_abilities)
+
+        # Test learning duplicate ability
+        self.player.learn_skill(ability1)
+        self.assertEqual(len(self.player.known_abilities), 1)
+
+        # Test learning duplicate spell
+        self.player.learn_skill(spell1)
+        self.assertEqual(len(self.player.known_spells), 1)
+        
+        # Test learning a generic Skill (should not go into known_abilities or known_spells)
+        self.player.learn_skill(generic_skill)
+        self.assertNotIn(generic_skill, self.player.known_abilities)
+        self.assertNotIn(generic_skill, self.player.known_spells)
+
+
+    def test_view_inventory(self):
+        # Test with an item
+        item1 = Item(name="Test Potion", description="A test potion")
+        self.player.add_item_to_inventory(item1)
+        # In a real test, you might redirect stdout to check the print output.
+        # For now, just ensuring it runs without error.
+        print("\n--- Testing view_inventory (with item) ---")
+        self.player.view_inventory() 
+        print("--- End view_inventory (with item) ---")
+
+        # Test with empty inventory
+        player2 = Player("EmptyInvPlayer")
+        print("\n--- Testing view_inventory (empty) ---")
+        player2.view_inventory()
+        print("--- End view_inventory (empty) ---")
+        self.assertTrue(True) # Placeholder assertion if no output capture
+
+    def test_view_skills(self):
+        # Test with a skill
+        ability1 = Ability(name="Test Strike", description="A test strike.", skill_rarity="Common", skill_type_csv="Active", category="Test")
+        self.player.learn_skill(ability1)
+        print("\n--- Testing view_skills (with skill) ---")
+        self.player.view_skills()
+        print("--- End view_skills (with skill) ---")
+
+        # Test with no skills
+        player2 = Player("NoSkillPlayer")
+        print("\n--- Testing view_skills (empty) ---")
+        player2.view_skills()
+        print("--- End view_skills (empty) ---")
+        self.assertTrue(True) # Placeholder assertion
+
 
 if __name__ == '__main__':
     unittest.main()
