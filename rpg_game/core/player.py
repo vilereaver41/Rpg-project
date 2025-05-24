@@ -1,3 +1,17 @@
+from typing import List, Optional # Ensure List and Optional are imported
+
+# Assuming Item, Ability, Spell, Skill will be imported for type hints
+# Adjust if Item is in a different relative path or if Skill etc. are in different files
+try:
+    from .item import Item
+    from .skill import Skill, Ability, Spell
+except ImportError: # Fallback for running __main__ block or if structure differs
+    # This might happen if player.py is run directly for its __main__
+    # and the current directory is 'core', so direct imports work.
+    from item import Item
+    from skill import Skill, Ability, Spell
+
+
 class Player:
     """
     Represents the player character in the RPG game.
@@ -30,6 +44,11 @@ class Player:
         self._calculate_derived_stats() # Calculate max_hp/max_mp first
         self.hp = self.max_hp # Set current HP to max
         self.mp = self.max_mp # Set current MP to max
+
+        # Inventory and Skills
+        self.inventory: List[Item] = []
+        self.known_abilities: List[Ability] = []
+        self.known_spells: List[Spell] = []
 
 
     def _calculate_derived_stats(self):
@@ -128,6 +147,64 @@ class Player:
         
         print(f"Congratulations! {self.name} reached level {self.level}!")
 
+    def add_item_to_inventory(self, item: Item) -> None:
+        """Appends the item to self.inventory."""
+        self.inventory.append(item)
+        print(f"{item.name} added to inventory.")
+
+    def learn_skill(self, skill: Skill) -> None:
+        """Learns a new skill, adding it to the appropriate list."""
+        if isinstance(skill, Ability) and not isinstance(skill, Spell): # Ensure it's an Ability but not a Spell
+            if skill not in self.known_abilities:
+                self.known_abilities.append(skill)
+                print(f"{self.name} learned ability: {skill.name}!")
+            else:
+                print(f"{self.name} already knows the ability: {skill.name}.")
+        elif isinstance(skill, Spell):
+            if skill not in self.known_spells:
+                self.known_spells.append(skill)
+                print(f"{self.name} learned spell: {skill.name}!")
+            else:
+                print(f"{self.name} already knows the spell: {skill.name}.")
+        else: # This includes PassiveSkill or any other Skill subclass
+            # For now, we are not specifically tracking other skill types like PassiveSkill
+            # in separate lists on the Player, but they could be learned conceptually.
+            # The prompt only asks for abilities and spells to be added to lists.
+            print(f"Cannot specifically categorize skill: {skill.name} of type {type(skill).__name__}. It's a general skill.")
+
+
+    def view_inventory(self) -> None:
+        """Prints the contents of the player's inventory."""
+        print("\n--- Inventory ---")
+        if not self.inventory:
+            print("Inventory is empty.")
+        else:
+            for i, item_obj in enumerate(self.inventory):
+                print(f"{i + 1}. {item_obj.name} - {item_obj.description}")
+        print("-----------------")
+
+    def view_skills(self) -> None:
+        """Prints the player's known abilities and spells."""
+        print("\n--- Skills ---")
+        if not self.known_abilities and not self.known_spells:
+            print("No skills learned.")
+        
+        if self.known_abilities:
+            print("Abilities:")
+            for i, ability in enumerate(self.known_abilities):
+                print(f"  {i + 1}. {ability.name} - {ability.description}")
+        else:
+            print("No abilities learned.")
+            
+        if self.known_spells:
+            print("Spells:")
+            for i, spell in enumerate(self.known_spells):
+                print(f"  {i + 1}. {spell.name} - {spell.description}")
+        else:
+            print("No spells learned.")
+        print("--------------")
+
+
 if __name__ == '__main__':
     # Example Usage (for testing purposes)
     player = Player("Hero")
@@ -155,37 +232,71 @@ if __name__ == '__main__':
     print("-" * 20)
 
     print(f"Gaining 70 XP (enough to level up)...")
-    # Current XP: 50. XP to next: 100. Needs 50 more for level up.
-    # Gaining 70 XP. 50 + 70 = 120.
-    # Level up: XP becomes 120 - 100 = 20. Level 2. Next XP target: 150.
-    # Stats increase: Str+2, Dex+2, Int+2, Con+2, Luck+1
-    # Con becomes 12. Max HP becomes 120. HP restored to 120.
-    # Int becomes 12. Max MP becomes 60. MP restored to 60.
     leveled = player.gain_xp(70) 
-    print(f"Leveled up: {leveled}") # Expected: True
-    print(f"Level: {player.level}, XP: {player.xp}/{player.xp_to_next_level}") # Expected: L2, 20/150 XP
-    print(f"HP: {player.hp}/{player.max_hp}, MP: {player.mp}/{player.max_mp}") # Expected: 120/120 HP, 60/60 MP
-    print(f"Primary Stats: {player.stats}") # Str:12, Dex:12, Int:12, Con:12, Luck:6
-    print(f"Derived Stats: {player.derived_stats}") # Atk:24, Def:18, MagP:24, Crit:0.3, Acc:1.2, Eva:0.24
-    print("-" * 20)
-
-    # Test another level up to ensure XP carry-over and multiple level ups work
-    print(f"Gaining 200 XP...")
-    # Current XP: 20. XP to next: 150. Needs 130 more.
-    # Gaining 200 XP. 20 + 200 = 220.
-    # Level up 1 (to L3): XP becomes 220 - 150 = 70. Next XP target: 200.
-    # Stats increase: Str+2, Dex+2, Int+2, Con+2, Luck+1
-    # Con becomes 14. Max HP becomes 140. HP restored to 140.
-    # Int becomes 14. Max MP becomes 70. MP restored to 70.
-    leveled = player.gain_xp(200)
-    print(f"Leveled up: {leveled}") # Expected: True
-    print(f"Level: {player.level}, XP: {player.xp}/{player.xp_to_next_level}") # Expected: L3, 70/200 XP
-    print(f"HP: {player.hp}/{player.max_hp}, MP: {player.mp}/{player.max_mp}") # Expected: 140/140 HP, 70/70 MP
-    print(f"Primary Stats: {player.stats}") # Str:14, Dex:14, Int:14, Con:14, Luck:7
-    print(f"Derived Stats: {player.derived_stats}") # Atk:28, Def:21, MagP:28, Crit:0.35, Acc:1.4, Eva:0.28
+    print(f"Leveled up: {leveled}") 
+    print(f"Level: {player.level}, XP: {player.xp}/{player.xp_to_next_level}") 
+    print(f"HP: {player.hp}/{player.max_hp}, MP: {player.mp}/{player.max_mp}") 
+    print(f"Primary Stats: {player.stats}") 
+    print(f"Derived Stats: {player.derived_stats}") 
     print("-" * 20)
     
-    # Test multiple level ups from a single XP gain
+    # --- Test Inventory and Skills ---
+    print("\n--- Testing Inventory and Skills ---")
+    # Mock objects for testing
+    # (Assuming Item, Ability, Spell classes are defined as in previous subtasks)
+    # If not, define simple mock classes here for the __main__ block to run
+    try:
+        # Try to use the actual classes if they are importable and instantiable
+        mock_potion = Item("Health Potion", "Restores 20 HP.")
+        mock_sword = Item("Iron Sword", "A basic sword.")
+        
+        mock_power_strike = Ability(name="Power Strike", description="A powerful attack.", skill_rarity="Common", skill_type_csv="Active", category="Combat", cost="5 MP", formula="ATK * 1.5")
+        mock_fireball = Spell(name="Fireball", description="Hurls a ball of fire.", skill_rarity="Common", skill_type_csv="Active", category="Elemental Magic", cost="10 MP", element="Fire", formula="MATK * 2")
+        # A general skill that is not an Ability or Spell (e.g., could be a PassiveSkill if that class existed and inherited Skill)
+        mock_toughness = Skill(name="Toughness", description="Increases HP.", skill_rarity="Uncommon", skill_type_csv="Passive", category="Defense")
+
+    except NameError: # If Item, Skill, Ability, Spell are not defined here (e.g. direct run of player.py)
+        print("WARN: Using very basic mocks for Item/Skill in Player __main__")
+        class MockItem:
+            def __init__(self, name, description=""): self.name = name; self.description = description
+        class MockSkill:
+            def __init__(self, name, description="", skill_rarity="", skill_type_csv="", category=""): 
+                self.name = name; self.description = description; self.skill_rarity = skill_rarity
+                self.skill_type_csv = skill_type_csv; self.category = category
+        class MockAbility(MockSkill):
+            def __init__(self, name, description="", skill_rarity="", skill_type_csv="Active", category="", cost="", formula=""):
+                super().__init__(name, description, skill_rarity, skill_type_csv, category)
+                self.cost = cost; self.formula = formula
+        class MockSpell(MockAbility):
+            def __init__(self, name, description="", skill_rarity="", skill_type_csv="Active", category="", cost="", element="", formula=""):
+                super().__init__(name, description, skill_rarity, skill_type_csv, category, cost, formula)
+                self.element = element
+        
+        mock_potion = MockItem("Health Potion", "Restores 20 HP.")
+        mock_sword = MockItem("Iron Sword", "A basic sword.")
+        mock_power_strike = MockAbility(name="Power Strike", description="A powerful attack.", cost="5 MP")
+        mock_fireball = MockSpell(name="Fireball", description="Hurls a ball of fire.", cost="10 MP", element="Fire")
+        mock_toughness = MockSkill(name="Toughness", description="Increases HP.", skill_type_csv="Passive")
+
+
+    player.add_item_to_inventory(mock_potion)
+    player.add_item_to_inventory(mock_sword)
+    
+    player.learn_skill(mock_power_strike)
+    player.learn_skill(mock_fireball)
+    player.learn_skill(mock_toughness) # Test with a generic Skill object
+
+    player.view_inventory()
+    player.view_skills()
+
+    print("\nDirectly printing lists:")
+    print(f"Inventory: {[(item.name) for item in player.inventory]}")
+    print(f"Abilities: {[(ability.name) for ability in player.known_abilities]}")
+    print(f"Spells: {[(spell.name) for spell in player.known_spells]}")
+    print("--- End Inventory and Skills Test ---")
+
+
+    # Reset player to Level 1 for multi-level test.
     player.xp = 0
     player.level = 1
     player.stats = {'strength': 10, 'dexterity': 10, 'intelligence': 10, 'constitution': 10, 'luck': 5}
@@ -193,60 +304,56 @@ if __name__ == '__main__':
     player._calculate_derived_stats()
     player.hp = player.max_hp
     player.mp = player.max_mp
-    print(f"Reset player to Level 1 for multi-level test. XP: {player.xp}/{player.xp_to_next_level}")
+    print(f"\nReset player to Level 1 for multi-level test. XP: {player.xp}/{player.xp_to_next_level}")
     print(f"Gaining 250 XP (enough for two levels)...")
-    # L1 -> L2: Needs 100 XP. 250 - 100 = 150 remaining. Next XP target: 150.
-    # L2 -> L3: Needs 150 XP. 150 - 150 = 0 remaining. Next XP target: 200.
     leveled = player.gain_xp(250)
-    print(f"Leveled up: {leveled}") # Expected: True
-    print(f"Level: {player.level}, XP: {player.xp}/{player.xp_to_next_level}") # Expected: L3, 0/200 XP
-    print(f"HP: {player.hp}/{player.max_hp}, MP: {player.mp}/{player.max_mp}") # Expected: Con 14 -> 140/140 HP, Int 14 -> 70/70 MP
-    print(f"Primary Stats: {player.stats}") # Str:14, Dex:14, Int:14, Con:14, Luck:7
+    print(f"Leveled up: {leveled}") 
+    print(f"Level: {player.level}, XP: {player.xp}/{player.xp_to_next_level}") 
+    print(f"HP: {player.hp}/{player.max_hp}, MP: {player.mp}/{player.max_mp}") 
+    print(f"Primary Stats: {player.stats}") 
     print(f"Derived Stats: {player.derived_stats}")
     print("-" * 20)
 
     # Test take_damage to 0
     player.take_damage(player.max_hp + 50) # Take more than max HP
-    print(f"HP after taking critical damage: {player.hp}/{player.max_hp}") # Expected: 0
+    print(f"HP after taking critical damage: {player.hp}/{player.max_hp}") 
     print("-" * 20)
     player.heal(player.max_hp)
-    print(f"HP after healing to max: {player.hp}/{player.max_hp}") # Expected: max_hp (140)
+    print(f"HP after healing to max: {player.hp}/{player.max_hp}") 
 
     # Test derived stat calculation after direct stat modification
-    print(f"Constitution before manual change: {player.stats['constitution']}") # Expected: 14
-    print(f"Max HP before: {player.max_hp}") # Expected: 140
-    print(f"Defense before: {player.derived_stats['defense']}") # Expected: 21
+    print(f"Constitution before manual change: {player.stats['constitution']}") 
+    print(f"Max HP before: {player.max_hp}") 
+    print(f"Defense before: {player.derived_stats['defense']}") 
     player.stats['constitution'] += 10 # Manually increase constitution
     player._calculate_derived_stats() # Recalculate
-    # Note: current HP is not automatically adjusted here unless it exceeds new max_hp,
-    # or healed. This is typically fine as direct stat changes are rare outside leveling.
-    print(f"Updated Constitution: {player.stats['constitution']}") # Expected: 24
-    print(f"Updated Max HP: {player.max_hp}") # Expected: 240
-    print(f"Updated Defense: {player.derived_stats['defense']}") # Expected: 36
-    print(f"Current HP: {player.hp}/{player.max_hp}") # Expected: 140/240 (HP didn't change)
+    print(f"Updated Constitution: {player.stats['constitution']}") 
+    print(f"Updated Max HP: {player.max_hp}") 
+    print(f"Updated Defense: {player.derived_stats['defense']}") 
+    print(f"Current HP: {player.hp}/{player.max_hp}") 
     print("-" * 20)
 
     print("Testing negative XP gain (should do nothing).")
     initial_xp = player.xp
     leveled = player.gain_xp(-50)
-    print(f"Leveled up: {leveled}") # Expected: False
-    print(f"XP after negative gain: {player.xp}") # Expected: same as initial_xp
+    print(f"Leveled up: {leveled}") 
+    print(f"XP after negative gain: {player.xp}") 
     print("-" * 20)
 
     print("Testing zero XP gain (should do nothing).")
     leveled = player.gain_xp(0)
-    print(f"Leveled up: {leveled}") # Expected: False
-    print(f"XP after zero gain: {player.xp}") # Expected: same as initial_xp
+    print(f"Leveled up: {leveled}") 
+    print(f"XP after zero gain: {player.xp}") 
     print("-" * 20)
 
     # Test that current HP is capped if max_hp decreases due to stat change
-    player.hp = player.max_hp # Heal to current max (240)
+    player.hp = player.max_hp 
     print(f"HP set to max: {player.hp}/{player.max_hp}")
     player.stats['constitution'] -= 15 # Drastically reduce constitution
     player._calculate_derived_stats() # Recalculate
-    print(f"Updated Constitution: {player.stats['constitution']}") # Expected: 24-15 = 9
-    print(f"Updated Max HP: {player.max_hp}") # Expected: 90
-    print(f"HP after constitution decrease: {player.hp}/{player.max_hp}") # Expected: 90/90 (capped)
+    print(f"Updated Constitution: {player.stats['constitution']}") 
+    print(f"Updated Max HP: {player.max_hp}") 
+    print(f"HP after constitution decrease: {player.hp}/{player.max_hp}") 
     print("-" * 20)
 
 ```
