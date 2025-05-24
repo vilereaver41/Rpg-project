@@ -1,4 +1,4 @@
-from typing import List
+from typing import List, Optional
 # Import Skill and Item for type hinting
 try:
     from rpg_game.core.skill import Skill
@@ -19,7 +19,8 @@ class Enemy:
                  level_range: str, spawn_chance: str, enemy_type: str,
                  max_mp: int, magic_attack: int, magic_defense: int,
                  agility: int, luck: int, has_sprite: bool,
-                 abilities_spells: List[Skill], loot: List[Item]):
+                 abilities_spells: List[Skill], loot: List[Item],
+                 zone_name: Optional[str] = None):
         """
         Initializes a new enemy.
 
@@ -39,6 +40,7 @@ class Enemy:
             has_sprite: Whether the enemy has a sprite.
             abilities_spells: A list of Skill objects the enemy has.
             loot: A list of Item objects the enemy can drop.
+            zone_name: The name of the zone this enemy instance might be associated with.
         """
         self.name: str = name
         self.max_hp: int = max_hp
@@ -56,6 +58,7 @@ class Enemy:
         self.has_sprite: bool = has_sprite
         self.abilities_spells: List[Skill] = abilities_spells
         self.loot: List[Item] = loot
+        self.zone_name: Optional[str] = zone_name
 
     def take_damage(self, amount: int) -> int:
         """
@@ -125,15 +128,19 @@ if __name__ == '__main__':
         agility=5,
         luck=2,
         has_sprite=True,
-        abilities_spells=goblin_ability_objects, # Now expects list of Skill objects
-        loot=goblin_loot_objects  # Now expects list of Item objects
+        abilities_spells=goblin_ability_objects,
+        loot=goblin_loot_objects,
+        zone_name="Goblin Test Zone"
     )
-    print(f"Enemy: {enemy.name}, Type: {enemy.enemy_type}, HP: {enemy.hp}/{enemy.max_hp}, MP: {enemy.max_mp}")
+    print(f"Enemy: {enemy.name}, Type: {enemy.enemy_type}, HP: {enemy.hp}/{enemy.max_hp}, MP: {enemy.max_mp}, Zone: {enemy.zone_name}")
     print(f"Attack: {enemy.attack_power}, Magic Attack: {enemy.magic_attack}, Agility: {enemy.agility}")
     
     # Printing object lists will show their repr
-    print(f"Abilities: {enemy.abilities_spells}") 
-    print(f"Potential Loot: {enemy.get_loot()}")
+    print(f"Abilities: {enemy.abilities_spells}")
+    # Example of accessing names from the objects
+    goblin_loot_names = [item.name for item in enemy.get_loot()]
+    print(f"Potential Loot: {goblin_loot_names}")
+
 
     damage_taken = enemy.take_damage(10)
     print(f"{enemy.name} took {damage_taken} damage. Current HP: {enemy.hp}")
@@ -159,8 +166,10 @@ if __name__ == '__main__':
         luck=1,
         has_sprite=True,
         abilities_spells=orc_ability_objects,
-        loot=orc_loot_objects
+        loot=orc_loot_objects,
+        zone_name=None # Example with no zone
     )
+    print(f"\nEnemy: {enemy2.name}, Type: {enemy2.enemy_type}, HP: {enemy2.hp}/{enemy2.max_hp}, MP: {enemy2.max_mp}, Zone: {enemy2.zone_name}")
     print(f"Is {enemy2.name} alive? {enemy2.is_alive()}")
     # Example of accessing names from the objects
     orc_loot_names = [item.name for item in enemy2.get_loot()]
